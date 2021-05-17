@@ -9,13 +9,26 @@
  *          Read   : 2 APIs, getALL, get
  *          Update : 1 API
  *          Delete : 1 API
+ *          + Signin : 1 API
+ *          + Signout: 1 API
+ *          + Signup : 1 API
  * 
  *      Data Schema
- *      id: Unique,
- *      original URL: String,
- *      hashed URL: String,
- *      expiration: Date,
- *      created_at: Date
+ *      URL:
+ *          id: Number(Unique),
+ *          original URL: String(Unique),
+ *          hashed URL: String,
+ *          expiration: Date,
+ *          created_at: Date,
+ *          + userId: Number
+ * 
+ *      + User:
+ *          + UserId: Number(Unique),
+ *          + Name: String,
+ *          + Email: String,
+ *          + CreationDate: Date,
+ *          + LastLogin: Date
+ *      
  */
 
 const express = require('express');
@@ -23,7 +36,9 @@ const app = express();
 const cors = require('cors');
 const crypto = require('crypto');
 const moment = require('moment');
-const { getData, CUDData } = require('./Model');
+const bcrypt = require('bcrypt');
+const { getUrl, CUDUrl } = require('./Model/tinyURL');
+const userController = require('./Controller/userController');
 // const {Sequelize, DataTypes} = require('sequelize');
 // const sequelize = new Sequelize('database', 'username', 'password',  {
 //     host: 'localhost',
@@ -51,10 +66,45 @@ function randomString(size = 10) {
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
+app.post('/signin', async (req, res) => {
+    try {
+    const { email, password } = req.body;
+    const hashedPassword = await userController.checkUser(email);
+    const result = await bcrypt.compare(password, hashedPassword);
+    res.send('OK!')
+    } catch (error) {
+        res.send('signin error');
+    }
+    
+})
+
+app.post('/signup', async (req, res) => {
+    try {
+    const { email, password, name } = req.body;
+    let userInfo = {};
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+    userInfo = {
+        name,
+        email,
+        password: hashedPassword
+    }
+    
+    console.log('userInfo: ', userInfo);
+    const result = await userController.createUser(userInfo)
+    
+    console.log('result: ', result);
+    res.send('OK!')
+    } catch(error) {
+        res.send(`signup error ${error}`);
+    }
+})
+
 app.get('/getAll', async (req, res) => {
     try {
         let sql = 'SELECT * FROM tinyURL';
-        const result = await getData(sql);
+        const result = await getUrl(sql);
         res.send(result);
     } catch (error) {
         throw error;
@@ -65,7 +115,7 @@ app.post('/', async (req, res) => {
     try {
         const { url } = req.body;
         let sql = 'SELECT * FROM tinyURL WHERE originalURL = ?';
-        const result = await getData(sql, url);
+        const result = await getUrl(sql, url);
         res.send(result);
     } catch (error) {
         res.send('Can not find the url');
@@ -83,9 +133,9 @@ app.post('/create', async (req, res) => {
             created_at: moment().unix(),
             expiration: moment().add(5, 'years').unix()
         }
-        const { insertId } = await CUDData(sql, queryString);
+        const { insertId } = await CUDUrl(sql, queryString);
         sql = 'SELECT * FROM tinyURL WHERE id = ?';
-        const [{ hashedURL }] = await getData(sql, insertId);
+        const [{ hashedURL }] = await getUrl(sql, insertId);
         res.status(200).send(`Finished: ${hashedURL}`);
     } catch (error) {
         res.status(404).send(`Create failed: ${error}`);
@@ -102,9 +152,9 @@ app.put('/update', async (req, res) => {
             created_at: moment().unix(),
             expiration: moment().add(5, 'years').unix()
         }
-        const result = await CUDData(sql, [updateString, original_url]);
+        const result = await CUDUrl(sql, [updateString, original_url]);
         sql = 'SELECT * FROM tinyURL WHERE originalURL = ?';
-        const [{ hashedURL }] = await getData(sql, new_url);
+        const [{ hashedURL }] = await getUrl(sql, new_url);
         res.status(400).send(`new hashedURL: ${hashedURL}`);
     } catch (error) {
         res.send('Update failed: ', error);
@@ -116,7 +166,7 @@ app.delete('/delete', async (req, res) => {
     try {
         const { url } = req.body;
         let sql = 'DELETE FROM tinyURL WHERE originalURL = ?';
-        await CUDData(sql, url);
+        await CUDUrl(sql, url);
         res.send('finished');
     } catch (error) {
         res.send('Delete failed: ', error);

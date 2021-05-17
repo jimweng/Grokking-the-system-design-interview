@@ -1,20 +1,13 @@
 
 const mysql = require('mysql2/promise');
+const sqlConfig = require('../config');
 
-const sqlConfig = {
-    host: 'localhost',
-    user: 'root',
-    password: '',
-    database: 'system_interview',
-    dialect: 'mysql'
-};
-
-async function getData(sql, queryString='') {
+async function getUrl(sql, queryString='') {
     try {
         const connection = await mysql.createConnection(sqlConfig);
         const [result] = await connection.query(sql, queryString);
         if (result.length === 0) {
-            throw error;
+            throw 'data no found';
         }
         return result;
     } catch (error) {
@@ -22,7 +15,7 @@ async function getData(sql, queryString='') {
     }
 }
 
-async function CUDData(sql, queryString=''){
+async function CUDUrl(sql, queryString=''){
     try {
         const connection = await mysql.createConnection(sqlConfig);
         const [result] = await connection.query(sql, queryString);
@@ -33,6 +26,6 @@ async function CUDData(sql, queryString=''){
 }
 
 module.exports = {
-    getData,
-    CUDData
+    getUrl,
+    CUDUrl
 };
