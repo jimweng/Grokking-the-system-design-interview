@@ -28,7 +28,11 @@
  *          + Email: String,
  *          + CreationDate: Date,
  *          + LastLogin: Date
- *      
+ * 
+ *      + Cache
+ *          + Redis: Depends on recently access
+ *      + ORM
+ *          + Sequelize
  */
 
 const express = require('express');
@@ -37,8 +41,12 @@ const cors = require('cors');
 const crypto = require('crypto');
 const moment = require('moment');
 const bcrypt = require('bcrypt');
+const redis = require('redis');
 const { getUrl, CUDUrl } = require('./Model/tinyURL');
 const userController = require('./Controller/userController');
+
+const redisPort = 6379;
+const client = redis.createClient(redisPort);
 // const {Sequelize, DataTypes} = require('sequelize');
 // const sequelize = new Sequelize('database', 'username', 'password',  {
 //     host: 'localhost',
@@ -68,35 +76,33 @@ app.use(express.json());
 
 app.post('/signin', async (req, res) => {
     try {
-    const { email, password } = req.body;
-    const hashedPassword = await userController.checkUser(email);
-    const result = await bcrypt.compare(password, hashedPassword);
-    res.send('OK!')
+        const { email, password } = req.body;
+        const hashedPassword = await userController.checkUser(email);
+        const result = await bcrypt.compare(password, hashedPassword);
+        res.send('OK!')
     } catch (error) {
         res.send('signin error');
     }
-    
+
 })
 
 app.post('/signup', async (req, res) => {
     try {
-    const { email, password, name } = req.body;
-    let userInfo = {};
+        const { email, password, name } = req.body;
+        let userInfo = {};
 
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-    userInfo = {
-        name,
-        email,
-        password: hashedPassword
-    }
-    
-    console.log('userInfo: ', userInfo);
-    const result = await userController.createUser(userInfo)
-    
-    console.log('result: ', result);
-    res.send('OK!')
-    } catch(error) {
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(password, salt);
+        userInfo = {
+            name,
+            email,
+            password: hashedPassword
+        }
+
+        const result = await userController.createUser(userInfo)
+
+        res.send('OK!')
+    } catch (error) {
         res.send(`signup error ${error}`);
     }
 })
@@ -112,14 +118,22 @@ app.get('/getAll', async (req, res) => {
 });
 
 app.post('/', async (req, res) => {
-    try {
-        const { url } = req.body;
-        let sql = 'SELECT * FROM tinyURL WHERE originalURL = ?';
-        const result = await getUrl(sql, url);
-        res.send(result);
-    } catch (error) {
-        res.send('Can not find the url');
-    }
+    const { url } = req.body;
+    client.get(url, async (err, reply) => {
+        if (reply) {
+            res.send(reply);
+        } else {
+            try {
+                let sql = 'SELECT * FROM tinyURL WHERE originalURL = ?';
+                const [{ hashedURL }] = await getUrl(sql, url);
+                client.set(url, hashedURL);
+                res.send(hashedURL);
+            } catch (error) {
+                res.send(`Can not find the url ${error}`);
+            }
+        }
+    });
+
 
 });
 
