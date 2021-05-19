@@ -1,6 +1,6 @@
 /**
  *   設計一個URL轉址的service
- *      backend: Express
+ *      backend: Express, passport
  *      DB: mySQL, Redis
  *      (optional): Lambda
  * 
@@ -31,6 +31,7 @@
  * 
  *      + Cache
  *          + Redis: Depends on recently access
+ * 
  *      + ORM
  *          + Sequelize
  */
@@ -42,6 +43,9 @@ const crypto = require('crypto');
 const moment = require('moment');
 const bcrypt = require('bcrypt');
 const redis = require('redis');
+const passport = require('passport');
+const LocalStrategy = require('passport-local').Strategy;
+
 const { getUrl, CUDUrl } = require('./Model/tinyURL');
 const userController = require('./Controller/userController');
 
@@ -65,6 +69,26 @@ function randomString(size = 10) {
         .slice(0, size);
 }
 
+passport.use(new LocalStrategy(
+    {
+        usernameField: 'email',
+        passwordField: 'password'
+    },
+    async function (email, password, done) {
+        try {
+            const hashedPassword = await userController.checkUser(email);
+            if (!hashedPassword) return done(null, false, { message: 'No user by that email' });
+
+            const result = await bcrypt.compare(password, hashedPassword);
+            if (!result) return done(null, false, { message: 'Not a matching password' });
+
+            return done(null, hashedPassword, { message: 'blabla' });
+        } catch (error) {
+            return done(error);
+        }
+    }
+))
+
 
 // const corsOption = {
 //     origin: '127.0.0.1:3306' 
@@ -73,18 +97,12 @@ function randomString(size = 10) {
 // app.use(cors(corsOption));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
+app.use(passport.initialize());
 
-app.post('/signin', async (req, res) => {
-    try {
-        const { email, password } = req.body;
-        const hashedPassword = await userController.checkUser(email);
-        const result = await bcrypt.compare(password, hashedPassword);
-        res.send('OK!')
-    } catch (error) {
-        res.send('signin error');
-    }
+app.post('/signin', passport.authenticate('local', { session:false }), (req, res) => {
+    res.send('Success!');
+});
 
-})
 
 app.post('/signup', async (req, res) => {
     try {
